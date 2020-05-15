@@ -82,7 +82,10 @@ class ServerData:
             self.newServerSocket.recv(1024)
             self.newServerSocket.send(str(self.Mode).encode())
             self.newServerSocket.recv(1024)
-            time.sleep(5)
+
+            self.newServerSocket.send("isRoomTempChange".encode())
+            self.Temperature = self.newServerSocket.recv(1024).decode()
+            time.sleep(3)
 
     def Time(self):  # 这里需要补充：将用时映射为几时几分的具体时间
         self.RunTime += 1

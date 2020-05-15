@@ -3,7 +3,7 @@ import threading
 from threading import Thread
 from time import sleep
 import os
-#test
+
 class UI:
     ClientSocket = None
     ClientSocket2 = None
@@ -41,11 +41,20 @@ class UI:
             self.TemperatureSet -= 1
         print("修改后，设定温度为：", self.TemperatureSet)
 
+    def TransBuild(self):
+        print("当前已经运行时间为", self.RunTime)
+        print("当前实际时间为", self.timeline)
+        print("当前花费金额为：:", self.Cost)
+        print("当前设定温度为:", self.TemperatureSet)
+        print("当前实际温度为:", self.Temperature)
+        print("当前温控模式为:", self.Mode)
+
     def RunSet(self):
         self.isRun = abs(self.isRun - 1)
         print("当前机器处于运行状态：", self.isRun)
+        return 1
 
-    def Menu(self):  # 操作菜单
+    def Menu(self):  # 操作菜单,修改风速的时候返回1
         print("Please input the operation you want:\n1. Change the wind\n2. Change the temperatue\n3. Change the mode\n")
         choose = input()
         self.ClientSocket2.send(str(choose).encode())
@@ -53,6 +62,7 @@ class UI:
             print("The wind speed now is ", self.WindSpeed)
             self.WindSetting()
             self.ClientSocket2.send(str(self.WindSpeed).encode())
+            return 1
 
         elif choose == "2":
             print("The Temperature in room now is ", self.Temperature)
@@ -75,16 +85,69 @@ class UI:
 
         else:
             print(choose, "the input is wrong ,Please input again...")
-        return
+        return 0
 
-    def InfoOper(self):  # 用户界面菜单的操作，和数据传输是独立的两个线程，通过读取，修改类当中的全局变量来使用
-        self.ClientSocket2 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        print('socket---%s' % self.ClientSocket2)
-        # 链接服务器
-        serverAddr = ('localhost', 8849)
-        self.ClientSocket2.connect(serverAddr)
-        while True:
-            self.Menu()
+
+class Room:  # 房间类，包含UI和sensor类
+    ClientSocket = None
+    ClientSocket2 = None
+    WindSpeed = 0  # 表示风速的调整模式，0最低，2最高，一个思路是，change每次+1并模3，实现风速的低中高循环,从而可以少设置一个按键
+    Temperature = 18  # 房间的实际温度
+    TemperatureSet = 25  # 房间的设定温度
+    Cost = 0
+    RunTime = 0
+    Mode = 1  # 1为制冷模式，0为制热模式
+    isRun = 1  # 记录当前是否正在运行客户端,1表示运行
+    ConnectSucceed = False
+    timeline = ""  # 从后台同步系统实际时间
+    UIInfo = None
+    isWindChange = 1
+
+    def __init__(self):
+        self.WindSpeedTime = 0  # 当前风速持续的时间
+        self.sensor = self.Sensor()
+        thread = Thread(target=self.InfoOper)
+        thread.setDaemon(True)
+        thread.start()
+
+        self.UIInfo = UI()
+        self.TransBuild()
+
+    def UIUpdate(self):  # 更新UI信息
+        self.RunTime = self.ClientSocket.recv(1024).decode()
+        self.RunTime = int(self.RunTime)
+        self.ClientSocket.send("#".encode())  # 一收一发，防止运行过快的时候数据被合并
+        self.UIInfo.RunTime = self.RunTime
+
+        self.timeline = self.ClientSocket.recv(1024).decode()
+        self.ClientSocket.send("#".encode())
+        self.UIInfo.timeline = self.timeline
+
+        self.Cost = self.ClientSocket.recv(1024).decode()
+        self.Cost = int(self.Cost)
+        self.ClientSocket.send("#".encode())
+        self.UIInfo.Cost = self.Cost
+
+        self.WindSpeed = self.ClientSocket.recv(1024).decode()
+        self.WindSpeed = int(self.WindSpeed)
+        self.ClientSocket.send("#".encode())
+        self.UIInfo.WindSpeed = self.WindSpeed
+
+        self.TemperatureSet = self.ClientSocket.recv(1024).decode()
+        self.TemperatureSet = int(self.TemperatureSet)
+        self.ClientSocket.send("#".encode())
+        self.UIInfo.TemperatureSet = self.TemperatureSet
+
+        self.Temperature = self.ClientSocket.recv(1024).decode()
+        self.Temperature = int(self.Temperature)
+        self.ClientSocket.send("#".encode())
+        self.UIInfo.Temperature = self.Temperature
+
+        self.Mode = self.ClientSocket.recv(1024).decode()
+        self.Mode = int(self.Mode)
+        self.ClientSocket.send("#".encode())
+        self.UIInfo.Mode = self.Mode
+        self.UIInfo.TransBuild()
 
     def TransBuild(self):
         self.ClientSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -95,49 +158,46 @@ class UI:
         print('connect success!')
         print("Welcome to the WindControl System, Here is the main page...")
         self.ConnectSucceed = True
+
         while True:
-            self.RunTime = self.ClientSocket.recv(1024).decode()
-            self.RunTime = int(self.RunTime)
-            print("当前已经运行时间为", self.RunTime)
-            self.ClientSocket.send("#".encode())  # 一收一发，防止运行过快的时候数据被合并
-
-            self.timeline = self.ClientSocket.recv(1024).decode()
-            print("当前实际时间为", self.timeline)
-            self.ClientSocket.send("#".encode())
-
-            self.Cost = self.ClientSocket.recv(1024).decode()
-            self.Cost = int(self.Cost)
-            print("当前花费金额为：:", self.Cost)
-            self.ClientSocket.send("#".encode())
-
-            self.WindSpeed = self.ClientSocket.recv(1024).decode()
-            self.WindSpeed = int(self.WindSpeed)
-            print("当前设定风速为:", self.WindSpeed)
-            self.ClientSocket.send("#".encode())
-
-            self.TemperatureSet = self.ClientSocket.recv(1024).decode()
-            self.TemperatureSet = int(self.TemperatureSet)
-            print("当前设定温度为:", self.TemperatureSet)
-            self.ClientSocket.send("#".encode())
-
-            self.Temperature = self.ClientSocket.recv(1024).decode()
-            self.Temperature = int(self.Temperature)
-            print("当前实际温度为:", self.Temperature)
-            self.ClientSocket.send("#".encode())
-
-            self.Mode = self.ClientSocket.recv(1024).decode()
-            self.Mode = int(self.Mode)
-            print("当前温控模式为:", self.Mode)
-            self.ClientSocket.send("#".encode())
-            print("\n")
-
+            self.UIUpdate()
+            print(self.isWindChange)
+            if self.isWindChange == 1:
+                self.WindSpeedTime = 0
+                self.isWindChange = 0
+            self.WindSpeedTime += 1
+            self.TempChange()
 
         # 关闭套接字
         self.ClientSocket.close()
         print('close socket!')
 
-test = UI()
-thread = Thread(target=test.InfoOper)
-thread.setDaemon(True)
-thread.start()
-test.TransBuild()
+    def InfoOper(self):  # 用户界面菜单的操作，和数据传输是独立的两个线程，通过读取，修改类当中的全局变量来使用.初版中因为发送数据的socket写到了UI类的每个子函数里，实在没法单独剔出来，只能不伦不类的写了
+        self.ClientSocket2 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        print('socket---%s' % self.ClientSocket2)
+        # 链接服务器
+        serverAddr = ('localhost', 8849)
+        self.ClientSocket2.connect(serverAddr)
+        self.UIInfo.ClientSocket2 = self.ClientSocket2
+        while True:
+            self.isWindChange = self.UIInfo.Menu()
+
+    def TempChange(self):  # 修改房间温度,这里的算法需要你来完成，现在这个是我随手写的
+        if (self.WindSpeedTime % 3 == 0) and (self.Mode == 0):
+            self.sensor.Temp += 1
+        elif (self.WindSpeedTime % 3 == 0) and (self.Mode == 1):
+            self.sensor.Temp -= 1
+        self.ClientSocket.recv(1024)
+        self.ClientSocket.send(str(self.sensor.Temp).encode())
+
+    class Sensor:  # 传感器类，检测温度
+        Temp = 26
+
+        def GetTemp(self):
+            return self.Temp
+
+
+
+test = Room()
+
+

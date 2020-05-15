@@ -61,3 +61,6 @@ def FirstUIDeal(): # 登录页，返回Flag表明输入的情况，1为成功，
             Flag = 0
             break
     return Flag
+
+class Manager():
+    pass

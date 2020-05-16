@@ -3,7 +3,7 @@ import socket
 import threading
 from threading import Thread
 import time
-import Monitor
+
 import datetime
 
 Username, Userpassword = None, None
@@ -70,7 +70,7 @@ class ServerData:
             self.newServerSocket.send(str(self.RunTime).encode())
             self.newServerSocket.recv(1024)
             self.newServerSocket.send(self.timeline.encode())
-            print("$$$$$$$$$$$$$$$44", self.timeline)
+            # print(self.timeline)
             self.newServerSocket.recv(1024)
             self.newServerSocket.send(str(self.Cost).encode())
             self.newServerSocket.recv(1024)
@@ -145,7 +145,7 @@ class ServerData:
             # print("############################")
             self.Menu()
 
-
+'''
 test = ServerData()
 Infothread = Thread(target=test.InfoOper)
 Infothread.setDaemon(True)
@@ -154,3 +154,4 @@ MonitorThread = Thread(target=Monitor.FirstUIDeal)
 MonitorThread.setDaemon(True)
 MonitorThread.start()
 test.SocketConnect()
+'''

@@ -3,7 +3,6 @@ import socket
 import threading
 from threading import Thread
 import time
-
 import datetime
 
 Username, Userpassword = None, None
@@ -17,24 +16,20 @@ UserInfoPath = "Info\\"
 # 5. 真实环境的温度模拟
 # 溜了溜了，继续肝操作系统的作业……
 class ServerData:
-    ServerSocket = None
-    ServerSocket2 = None
-    newServerSocket2 = None
-    newServerSocket, destAddr = None, None
-    socket_pool = []
-    CLOCK = 0  #未来开并发的时候，这里改为数组，然后通过映射对应每个客户端的clock时间
+    socket_pool = {}  # 并发的实时信息线程池
+    MenuPool = {}  # 并发的按键信息线程池
+    CLOCK = {}  # 未来开并发的时候，这里改为数组，然后通过映射对应每个客户端的clock时间
     UserData = []
-    WindSpeed = 0 # 表示风速的调整模式
-    Temperature = 18  # 房间的实际温度
-    TemperatureSet = 25  # 房间的设定温度
-    Cost = 0
-    RunTime = 0
-    Mode = 1  # 1为制冷模式，0为制热模式
-    isRun = True  # 记录当前是否正在运行客户端
-    SocketSucceed = False
-    newServerSocket2 = 0
-    newServerSocket = 0
+    WindSpeed = {}  # 表示风速的调整模式
+    Temperature = {}  # 房间的实际温度
+    TemperatureSet = {}  # 房间的设定温度
+    Cost = {}
+    RunTime = {}
+    Mode = {}  # 1为制冷模式，0为制热模式
+    isRun = {}  # 记录当前是否正在运行客户端,1为运行，0为停止（由于布尔变量在socket传输解码过程中会变化，所以先考虑用int）
+    SocketSucceed = {}
     timeline = ""  # 获取的系统实际时间
+    RoomCount = 0  # 当前已经启动的客户端数目
 
     def getCost(self):  # 对外接口，读取当前总花销
         return self.Cost
@@ -48,110 +43,133 @@ class ServerData:
     def RealTem(self):  # 需要补充：模拟真实环境的温度
         pass
 
-    def SocketConnect(self):  # 通讯的主体,也是运行的main函数主要部分
-        self.newServerSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    def SocketStart(self):  # 通讯的主体,也是运行的main函数主要部分
+        ServerSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         address = ('localhost', 8848)
-        self.newServerSocket.bind(address)
-        self.newServerSocket.listen(5)
-        print('binding succeed!')
-        self.newServerSocket, destAddr = self.newServerSocket.accept()
-        print(self.newServerSocket)
-        self.socket_pool.append(self.newServerSocket)
-        self.SocketSucceed = True
-    #    下面这几行是历史遗留代码，不用管
-    #    thread = Thread(target=AcceptClient, args=(tcpnewServerSocket, Username, Userpassword))
-    #    thread.setDaemon(True)
-    #    thread.start()
-    #    while True:
-    #        sleep(1)
-
+        ServerSocket.bind(address)
+        ServerSocket.listen(5)
+        print('Realtime Socket binding succeed!')
+        # 建立完实时信息的通讯线程之后，建立按键的通讯线程
+        MenuThread = Thread(target=self.InfoStart)
+        MenuThread.setDaemon(True)
+        MenuThread.start()
+        self.SocketAccept(ServerSocket)
         while True:
-            self.Time()
-            self.newServerSocket.send(str(self.RunTime).encode())
-            self.newServerSocket.recv(1024)
-            self.newServerSocket.send(self.timeline.encode())
-            # print(self.timeline)
-            self.newServerSocket.recv(1024)
-            self.newServerSocket.send(str(self.Cost).encode())
-            self.newServerSocket.recv(1024)
-            self.newServerSocket.send(str(self.WindSpeed).encode())
-            self.newServerSocket.recv(1024)
-            self.newServerSocket.send(str(self.TemperatureSet).encode())
-            self.newServerSocket.recv(1024)
-            self.newServerSocket.send(str(self.Temperature).encode())
-            self.newServerSocket.recv(1024)
-            self.newServerSocket.send(str(self.Mode).encode())
-            self.newServerSocket.recv(1024)
+            time.sleep(1)
 
-            self.newServerSocket.send("isRoomTempChange".encode())
-            self.Temperature = self.newServerSocket.recv(1024).decode()
+    def SocketAccept(self, ServerSocket):
+        while True:
+            newServerSocket, destAddr = ServerSocket.accept()
+            print(newServerSocket)
+            self.socket_pool[newServerSocket] = self.socket_pool.__len__()
+            self.SocketSucceed = True
+            RoomNumber = self.socket_pool[newServerSocket]
+            self.RoomCount += 1
+            print("ReadTime 得到的房间号为", RoomNumber)
+            # 初始化房间所有部件（风速，温度）的信息
+            self.CLOCK[RoomNumber] = 0
+            self.WindSpeed[RoomNumber] = 0
+            self.Temperature[RoomNumber] = 18
+            self.TemperatureSet[RoomNumber] = 26
+            self.RunTime[RoomNumber] = 0
+            self.Mode[RoomNumber] = 0
+            self.isRun[RoomNumber] = 1
+            self.Cost[RoomNumber] = 0
+            MultiSocket = Thread(target=self.RealTimeInfoOper, args=(newServerSocket, RoomNumber))
+            MultiSocket.setDaemon(True)
+            MultiSocket.start()
+
+    def RealTimeInfoOper(self, newServerSocket, RoomNumber):
+        # 运行实时通讯线程
+        while True:
+            self.Time(RoomNumber)
+            newServerSocket.send(str(self.RunTime[RoomNumber]).encode())
+            newServerSocket.recv(1024)
+            newServerSocket.send(self.timeline.encode())
+            # print(self.timeline)
+            newServerSocket.recv(1024)
+            newServerSocket.send(str(self.Cost[RoomNumber]).encode())
+            newServerSocket.recv(1024)
+            newServerSocket.send(str(self.WindSpeed[RoomNumber]).encode())
+            newServerSocket.recv(1024)
+            newServerSocket.send(str(self.TemperatureSet[RoomNumber]).encode())
+            newServerSocket.recv(1024)
+            newServerSocket.send(str(self.Temperature[RoomNumber]).encode())
+            newServerSocket.recv(1024)
+            newServerSocket.send(str(self.Mode[RoomNumber]).encode())
+            newServerSocket.recv(1024)
+
+            newServerSocket.send("isRoomTempChange".encode())
+            self.Temperature[RoomNumber] = newServerSocket.recv(1024).decode()
             time.sleep(3)
 
-    def Time(self):  # 这里需要补充：将用时映射为几时几分的具体时间
-        self.RunTime += 1
+    def Time(self, RoomNumber):  # 这里需要补充：将用时映射为几时几分的具体时间
+        self.RunTime[RoomNumber] += 1
         now = datetime.datetime.now()
         self.timeline = now.strftime("%Y-%m-%d %H:%M:%S")
 
-    def CostRecord(self):  #记录该用户的所有使用记录
+    def CostRecord(self, RoomNumber):  # 记录该用户的所有使用记录
         CurrentData = []
-        CurrentData.insert(self.CLOCK)
-        CurrentData.insert(self.WindSpeed)
-        CurrentData.insert(self.Temperature)
-        CurrentData.insert(self.TemperatureSet)
-        CurrentData.insert(self.Mode)
-        CurrentData.insert(self.isRun)
-        CurrentData.insert(self.Cost)
-        self.UserData.insert(CurrentData)
+        CurrentData.append(self.CLOCK[RoomNumber])
+        CurrentData.append(self.WindSpeed[RoomNumber])
+        CurrentData.append(self.Temperature[RoomNumber])
+        CurrentData.append(self.TemperatureSet[RoomNumber])
+        CurrentData.append(self.Mode[RoomNumber])
+        CurrentData.append(self.isRun[RoomNumber])
+        CurrentData.append(self.Cost[RoomNumber])
+        self.UserData.append(CurrentData)
 
-    def CostCalcu(self):  # 需要补充计费策略
-        self.Cost += 1
+    def CostCalcu(self, RoomNumber):  # 需要补充计费策略
+        self.Cost[RoomNumber] += 1
 
-    def Menu(self):  # 与客户端的Menu对应
+    def Menu(self, newServerSocket2, RoomNumber):  # 与客户端的Menu对应
         # print("@@@@@@@@@@@@@@@@@@@@@@@@@")
-        choose = self.newServerSocket2.recv(1024).decode()
+        choose = newServerSocket2.recv(1024).decode()
         print("choose:", choose)
         if choose == "1":
-            Wind = self.newServerSocket2.recv(1024).decode() # 等待接收风速设定
+            Wind = newServerSocket2.recv(1024).decode()  # 等待接收风速设定
+
+            self.WindSpeed[RoomNumber] = int(Wind)
+            self.WindSpeed[RoomNumber] = Wind
             print(Wind)
-            self.WindSpeed = int(Wind)
-            self.WindSpeed = Wind
+            print(self.WindSpeed)
         elif choose == "2":
-            Temp = int(self.newServerSocket2.recv(1024).decode())
-            self.TemperatureSet = Temp
+            Temp = int(newServerSocket2.recv(1024).decode())
+            self.TemperatureSet[RoomNumber] = Temp
         elif choose == "3":
-            Mode = self.newServerSocket2.recv(1024).decode()
-            self.Mode = int(Mode)
-            print(self.Mode)
-            self.newServerSocket2.send("#".encode())
-            self.TemperatureSet = self.newServerSocket2.recv(1024).decode()
-            self.TemperatureSet = int(self.TemperatureSet)
+            Mode = newServerSocket2.recv(1024).decode()
+            self.Mode[RoomNumber] = int(Mode)
+            print(self.Mode[RoomNumber])
+            newServerSocket2.send("#".encode())
+            self.TemperatureSet[RoomNumber] = newServerSocket2.recv(1024).decode()
+            self.TemperatureSet[RoomNumber] = int(self.TemperatureSet[RoomNumber])
         elif choose == "4":
-            self.isRun = self.newServerSocket2.recv(1024).decode()
-            self.isRun = int(self.isRun)
+            isRun = newServerSocket2.recv(1024).decode()
+            self.isRun[RoomNumber] = int(isRun)
         else:
             pass
 
-    def InfoOper(self):  # 与客户端的同名函数对应
-        self.ServerSocket2 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    def InfoStart(self):  # 按键信息传输的通道建立
+        ServerSocket2 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         address = ('localhost', 8849)
-        self.ServerSocket2.bind(address)
-        self.ServerSocket2.listen(5)
-        print('binding succeed!')
-        self.newServerSocket2, destAddr = self.ServerSocket2.accept()
-        print(self.newServerSocket2)
-        self.socket_pool.append(self.newServerSocket2)
-        self.SocketSucceed = True
-        while True:
-            # print("############################")
-            self.Menu()
+        ServerSocket2.bind(address)
+        ServerSocket2.listen(5)
+        print('MenuSocket binding succeed!')
+        self.InfoAccept(ServerSocket2)
 
-'''
-test = ServerData()
-Infothread = Thread(target=test.InfoOper)
-Infothread.setDaemon(True)
-Infothread.start()
-MonitorThread = Thread(target=Monitor.FirstUIDeal)
-MonitorThread.setDaemon(True)
-MonitorThread.start()
-test.SocketConnect()
-'''
+
+    def InfoAccept(self, ServerSocket2):
+        while True:
+            newServerSocket2, destAddr = ServerSocket2.accept()
+            print(newServerSocket2)
+            RoomNumber = self.RoomCount
+            print("Menu线程得到的房间号为：", RoomNumber)
+            self.MenuPool[newServerSocket2] = RoomNumber
+            self.SocketSucceed = True
+            MenuThread = Thread(target=self.InfoOper, args=(newServerSocket2, RoomNumber))
+            MenuThread.setDaemon(True)
+            MenuThread.start()
+
+    def InfoOper(self, newServerSocket2, RoomNumber):
+        while True:
+            self.Menu(newServerSocket2, RoomNumber)

@@ -11,13 +11,10 @@ class Manager():
 
     def __init__(self):
         run = ServerData()
-        Infothread = Thread(target=run.InfoOper)
-        Infothread.setDaemon(True)
-        Infothread.start()
         MonitorThread = Thread(target=self.FirstUIDeal)
         MonitorThread.setDaemon(True)
         MonitorThread.start()
-        run.SocketConnect()
+        run.SocketStart()
 
 
     def LogNameCheck(self, id, password):  # 检查用户登录信息是否正确
@@ -60,7 +57,7 @@ class Manager():
 
     def FirstUIDeal(self):  # 登录页，返回Flag表明输入的情况，1为成功，0为退出
         while True:  # 只要没有选择退出或者登陆成功，就一直在登录页面循环
-            symbol = input("Choose your Identification: 1 for authority, 2 for header")
+            symbol = input("Choose your Identification: 1 for authority, 2 for header\n")
             #  print("symbol:", symbol)
             if symbol == "1":  # 管理员登录
                 password = input("Please input the Password:")

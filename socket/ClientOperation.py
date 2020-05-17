@@ -45,9 +45,11 @@ class UI:
         print("当前已经运行时间为", self.RunTime)
         print("当前实际时间为", self.timeline)
         print("当前花费金额为：:", self.Cost)
+        print("当前设定风速为:", self.WindSpeed)
         print("当前设定温度为:", self.TemperatureSet)
         print("当前实际温度为:", self.Temperature)
         print("当前温控模式为:", self.Mode)
+        print("\n")
 
     def RunSet(self):
         self.isRun = abs(self.isRun - 1)
@@ -149,7 +151,7 @@ class Room:  # 房间类，包含UI和sensor类
         self.UIInfo.Mode = self.Mode
         self.UIInfo.TransBuild()
 
-    def TransBuild(self):
+    def TransBuild(self):  # 实时信息传输的线程
         self.ClientSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         print('socket---%s' % self.ClientSocket)
         # 链接服务器
